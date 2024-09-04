@@ -1,1 +1,4 @@
 .env
+users.csv
+body_template.txt
+subject.txt

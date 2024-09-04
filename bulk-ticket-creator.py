@@ -1,6 +1,5 @@
 import os
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+import csv
 import requests
 from dotenv import load_dotenv
 
@@ -10,39 +9,26 @@ load_dotenv()
 ZENDESK_SUBDOMAIN = os.getenv("ZENDESK_SUBDOMAIN")
 ZENDESK_EMAIL = os.getenv("ZENDESK_EMAIL")
 ZENDESK_API_TOKEN = os.getenv("ZENDESK_API_TOKEN")
-GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
-GOOGLE_SHEET_RANGE = os.getenv("GOOGLE_SHEET_RANGE")
+CSV_FILE_PATH = os.getenv("CSV_FILE_PATH")
 DRY_RUN = os.getenv("DRY_RUN", "false").lower() in ["true", "1", "t"]
-
-# Define the scope for gspread
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-
-# Authenticate and build the Sheets API client using gspread
-def authenticate_google_sheets():
-    creds = ServiceAccountCredentials.from_json_keyfile_name('path_to_your_credentials.json', scope)
-    client = gspread.authorize(creds)
-    return client
 
 # Load content from a text file
 def load_file_content(filename):
     with open(filename, 'r') as file:
         return file.read().strip()
 
-# Retrieve emails from the specified Google Sheet column
-def get_emails_from_sheet():
-    client = authenticate_google_sheets()
-    sheet = client.open_by_key(GOOGLE_SHEET_ID)
-    worksheet = sheet.worksheet('Sheet1')
-    email_column = worksheet.col_values(1)
-
+# Retrieve emails from the specified CSV file
+def get_emails_from_csv():
     email_map = {}
-    for email in email_column:
-        if email:
-            domain = email.split('@')[1]
-            if domain not in email_map:
-                email_map[domain] = []
-            email_map[domain].append(email)
-
+    with open(CSV_FILE_PATH, 'r') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            if row:
+                email = row[0].strip()
+                domain = email.split('@')[1]
+                if domain not in email_map:
+                    email_map[domain] = []
+                email_map[domain].append(email)
     return email_map
 
 # Create or simulate creating a Zendesk ticket
@@ -81,7 +67,7 @@ def main():
     subject = load_file_content('subject.txt')
     body_template = load_file_content('body_template.txt')
     
-    email_map = get_emails_from_sheet()
+    email_map = get_emails_from_csv()
     
     for domain, emails in email_map.items():
         if emails:
