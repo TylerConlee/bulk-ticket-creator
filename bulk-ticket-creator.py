@@ -1,8 +1,8 @@
 import os
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 import requests
 from dotenv import load_dotenv
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 
 # Load environment variables from .env file
 load_dotenv()
@@ -13,36 +13,38 @@ ZENDESK_API_TOKEN = os.getenv("ZENDESK_API_TOKEN")
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 GOOGLE_SHEET_RANGE = os.getenv("GOOGLE_SHEET_RANGE")
 
-# Load your service account key JSON file
-SERVICE_ACCOUNT_FILE = 'path_to_your_service_account.json'
+# Define the scope for gspread
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
-# Authenticate and build the Sheets API client
-credentials = service_account.Credentials.from_service_account_file(
-    SERVICE_ACCOUNT_FILE, scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
-)
-service = build('sheets', 'v4', credentials=credentials)
+# Authenticate and build the Sheets API client using gspread
+def authenticate_google_sheets():
+    creds = ServiceAccountCredentials.from_json_keyfile_name('token.json', scope)
+    client = gspread.authorize(creds)
+    return client
 
+# Load content from a text file
 def load_file_content(filename):
     with open(filename, 'r') as file:
         return file.read().strip()
 
+# Retrieve emails from the specified Google Sheet column
 def get_emails_from_sheet():
-    sheet = service.spreadsheets()
-    result = sheet.values().get(spreadsheetId=GOOGLE_SHEET_ID,
-                                range=GOOGLE_SHEET_RANGE).execute()
-    values = result.get('values', [])
-    
+    client = authenticate_google_sheets()
+    sheet = client.open_by_key(GOOGLE_SHEET_ID)
+    worksheet = sheet.worksheet('Sheet1')
+    email_column = worksheet.col_values(1)
+
     email_map = {}
-    for row in values:
-        if row:
-            email = row[0]
+    for email in email_column:
+        if email:
             domain = email.split('@')[1]
             if domain not in email_map:
                 email_map[domain] = []
             email_map[domain].append(email)
-    
+
     return email_map
 
+# Create a Zendesk ticket
 def create_zendesk_ticket(requestor_email, cc_emails, subject, body):
     url = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com/api/v2/tickets.json"
     
@@ -68,6 +70,7 @@ def create_zendesk_ticket(requestor_email, cc_emails, subject, body):
     else:
         print(f"Failed to create ticket for {requestor_email}: {response.text}")
 
+# Main function to execute the ticket creation process
 def main():
     subject = load_file_content('subject.txt')
     body_template = load_file_content('body_template.txt')
