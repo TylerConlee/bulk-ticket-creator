@@ -12,13 +12,14 @@ ZENDESK_EMAIL = os.getenv("ZENDESK_EMAIL")
 ZENDESK_API_TOKEN = os.getenv("ZENDESK_API_TOKEN")
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 GOOGLE_SHEET_RANGE = os.getenv("GOOGLE_SHEET_RANGE")
+DRY_RUN = os.getenv("DRY_RUN", "false").lower() in ["true", "1", "t"]
 
 # Define the scope for gspread
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
 # Authenticate and build the Sheets API client using gspread
 def authenticate_google_sheets():
-    creds = ServiceAccountCredentials.from_json_keyfile_name('token.json', scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_name('path_to_your_credentials.json', scope)
     client = gspread.authorize(creds)
     return client
 
@@ -44,31 +45,36 @@ def get_emails_from_sheet():
 
     return email_map
 
-# Create a Zendesk ticket
+# Create or simulate creating a Zendesk ticket
 def create_zendesk_ticket(requestor_email, cc_emails, subject, body):
-    url = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com/api/v2/tickets.json"
-    
-    ticket_data = {
-        "ticket": {
-            "subject": subject,
-            "comment": {"body": body},
-            "requester": {"email": requestor_email},
-            "ccs": [{"email": email} for email in cc_emails]
-        }
-    }
-    
-    headers = {"Content-Type": "application/json"}
-    response = requests.post(
-        url,
-        json=ticket_data,
-        auth=(f"{ZENDESK_EMAIL}/token", ZENDESK_API_TOKEN),
-        headers=headers
-    )
-    
-    if response.status_code == 201:
-        print(f"Ticket created successfully for {requestor_email} (CC'd: {cc_emails})")
+    if DRY_RUN:
+        print(f"Dry Run: Ticket would be created for {requestor_email} (CC'd: {cc_emails})")
+        print(f"Subject: {subject}")
+        print(f"Body: {body}")
     else:
-        print(f"Failed to create ticket for {requestor_email}: {response.text}")
+        url = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com/api/v2/tickets.json"
+        
+        ticket_data = {
+            "ticket": {
+                "subject": subject,
+                "comment": {"body": body},
+                "requester": {"email": requestor_email},
+                "ccs": [{"email": email} for email in cc_emails]
+            }
+        }
+        
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(
+            url,
+            json=ticket_data,
+            auth=(f"{ZENDESK_EMAIL}/token", ZENDESK_API_TOKEN),
+            headers=headers
+        )
+        
+        if response.status_code == 201:
+            print(f"Ticket created successfully for {requestor_email} (CC'd: {cc_emails})")
+        else:
+            print(f"Failed to create ticket for {requestor_email}: {response.text}")
 
 # Main function to execute the ticket creation process
 def main():
